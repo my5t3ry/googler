@@ -38,10 +38,27 @@ import ssl
 from subprocess import Popen, PIPE, DEVNULL
 import sys
 import textwrap
+import termios
+import tty
 import unicodedata
 import urllib.parse
 import uuid
 import webbrowser
+from http.client import HTTPSConnection
+from subprocess import Popen, PIPE, DEVNULL
+
+fd = sys.stdin.fileno()
+old_settings = termios.tcgetattr(fd)
+
+
+def getch():
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
 
 # Python optional dependency compatibility layer
 try:
@@ -51,6 +68,7 @@ except ImportError:
 
 try:
     import setproctitle
+
     setproctitle.setproctitle('googler')
 except (ImportError, Exception):
     pass
@@ -80,12 +98,12 @@ def sigint_handler(signum, frame):
     print('\nInterrupted.', file=sys.stderr)
     sys.exit(1)
 
+
 try:
     signal.signal(signal.SIGINT, sigint_handler)
 except ValueError:
     # signal only works in main thread
     pass
-
 
 # Constants
 
@@ -166,7 +184,6 @@ def monkeypatch_textwrap_for_cjk():
 
 monkeypatch_textwrap_for_cjk()
 
-
 CoordinateType = Tuple[int, int]
 
 
@@ -205,7 +222,7 @@ class TrackedTextwrap:
                 # in order to produce meaningful coordinates.
                 self._lines = [""]
             for row, line in enumerate(self._lines):
-                assert text[offset : offset + len(line)] == line
+                assert text[offset: offset + len(line)] == line
                 col = 0
                 for _ in line:
                     self._coords.append((row, col))
@@ -269,7 +286,6 @@ from collections import OrderedDict
 from enum import Enum
 from html.parser import HTMLParser
 
-
 SelectorGroupLike = Union[str, "SelectorGroup", "Selector"]
 
 
@@ -329,7 +345,7 @@ class Node(object):
         return self.select_all(selector)
 
     def matched_by(
-        self, selector: SelectorGroupLike, root: Optional["Node"] = None
+            self, selector: SelectorGroupLike, root: Optional["Node"] = None
     ) -> bool:
         """
         Checks whether this node is matched by `selector`.
@@ -395,7 +411,7 @@ class Node(object):
             return []
         try:
             index = parent.children.index(self)
-            return parent.children[index + 1 :]
+            return parent.children[index + 1:]
         except ValueError:  # pragma: no cover
             raise ValueError("node is not found in children of its parent")
 
@@ -426,7 +442,7 @@ class Node(object):
         try:
             index = parent.children.index(self)
             if index > 0:
-                return parent.children[index - 1 :: -1]
+                return parent.children[index - 1:: -1]
             else:
                 return []
         except ValueError:  # pragma: no cover
@@ -440,7 +456,7 @@ class Node(object):
         return None
 
     def ancestors(
-        self, *, root: Optional["Node"] = None
+            self, *, root: Optional["Node"] = None
     ) -> Generator["Node", None, None]:
         """
         Ancestors are generated in reverse order of depth, stopping at
@@ -514,12 +530,12 @@ class ElementNode(Node):
     """
 
     def __init__(
-        self,
-        tag: str,
-        attrs: Iterable[Tuple[str, Optional[str]]],
-        *,
-        parent: Optional["Node"] = None,
-        children: Optional[Sequence["Node"]] = None
+            self,
+            tag: str,
+            attrs: Iterable[Tuple[str, Optional[str]]],
+            *,
+            parent: Optional["Node"] = None,
+            children: Optional[Sequence["Node"]] = None
     ) -> None:
         Node.__init__(self)
         self.tag = tag.lower()  # type: str
@@ -662,7 +678,7 @@ class DOMBuilder(HTMLParser):
         self._stack = []  # type: List[Node]
 
     def handle_starttag(
-        self, tag: str, attrs: Sequence[Tuple[str, Optional[str]]]
+            self, tag: str, attrs: Sequence[Tuple[str, Optional[str]]]
     ) -> None:
         node = ElementNode(tag, attrs)
         node._partial = True
@@ -696,7 +712,7 @@ class DOMBuilder(HTMLParser):
     # handle_startendtag (which by default triggers both handle_starttag
     # and handle_endtag). See https://www.bugs.python.org/issue25258.
     def handle_startendtag(
-        self, tag: str, attrs: Sequence[Tuple[str, Optional[str]]]
+            self, tag: str, attrs: Sequence[Tuple[str, Optional[str]]]
     ) -> None:
         self.handle_starttag(tag, attrs)
 
@@ -928,14 +944,14 @@ class Selector:
     """
 
     def __init__(
-        self,
-        *,
-        tag: Optional[str] = None,
-        classes: Optional[Sequence[str]] = None,
-        id: Optional[str] = None,
-        attrs: Optional[Sequence["AttributeSelector"]] = None,
-        combinator: Optional["Combinator"] = None,
-        previous: Optional["Selector"] = None
+            self,
+            *,
+            tag: Optional[str] = None,
+            classes: Optional[Sequence[str]] = None,
+            id: Optional[str] = None,
+            attrs: Optional[Sequence["AttributeSelector"]] = None,
+            combinator: Optional["Combinator"] = None,
+            previous: Optional["Selector"] = None
     ) -> None:
         self.tag = tag.lower() if tag else None
         self.classes = list(classes or [])
@@ -1252,7 +1268,7 @@ class AttributeSelector:
     """
 
     def __init__(
-        self, attr: str, val: Optional[str], type: "AttributeSelectorType"
+            self, attr: str, val: Optional[str], type: "AttributeSelectorType"
     ) -> None:
         self.attr = attr.lower()
         self.val = val
@@ -1378,12 +1394,13 @@ def _tag_is_void(tag: str) -> bool:
         "wbr",
     )
 
+
 ### end dim ###
 
 
 # Global helper functions
 
-def open_url(url):
+def open_url(url, silent=False):
     """Open an URL in the user's default web browser.
 
     The string attribute ``open_url.url_handler`` can be used to open URLs
@@ -1406,7 +1423,7 @@ def open_url(url):
 
     # Custom URL handler gets max priority
     if hasattr(open_url, 'url_handler'):
-        p = Popen([open_url.url_handler, url], stdin=PIPE)
+        p = Popen([open_url.url_handler, url, str(silent)], stdin=PIPE)
         p.communicate()
         return
 
@@ -1619,7 +1636,7 @@ class GoogleUrl(object):
         self._query_dict = {
             'ie': 'UTF-8',
             'oe': 'UTF-8',
-            #'gbv': '1',  # control the presence of javascript on the page, 1=no js, 2=js
+            # 'gbv': '1',  # control the presence of javascript on the page, 1=no js, 2=js
             'sei': base64.encodebytes(uuid.uuid1().bytes).decode("ascii").rstrip('=\n').replace('/', '_'),
         }
         self.update(opts, **kwargs)
@@ -1832,72 +1849,72 @@ class GoogleUrl(object):
     # Data source: https://web.archive.org/web/20170615200243/https://en.wikipedia.org/wiki/List_of_Google_domains
     # Scraper script: https://gist.github.com/zmwangx/b976e83c14552fe18b71
     TLD_TO_DOMAIN_MAP = {
-        'ac': 'google.ac',      'ad': 'google.ad',      'ae': 'google.ae',
-        'af': 'google.com.af',  'ag': 'google.com.ag',  'ai': 'google.com.ai',
-        'al': 'google.al',      'am': 'google.am',      'ao': 'google.co.ao',
-        'ar': 'google.com.ar',  'as': 'google.as',      'at': 'google.at',
-        'au': 'google.com.au',  'az': 'google.az',      'ba': 'google.ba',
-        'bd': 'google.com.bd',  'be': 'google.be',      'bf': 'google.bf',
-        'bg': 'google.bg',      'bh': 'google.com.bh',  'bi': 'google.bi',
-        'bj': 'google.bj',      'bn': 'google.com.bn',  'bo': 'google.com.bo',
-        'br': 'google.com.br',  'bs': 'google.bs',      'bt': 'google.bt',
-        'bw': 'google.co.bw',   'by': 'google.by',      'bz': 'google.com.bz',
-        'ca': 'google.ca',      'cat': 'google.cat',    'cc': 'google.cc',
-        'cd': 'google.cd',      'cf': 'google.cf',      'cg': 'google.cg',
-        'ch': 'google.ch',      'ci': 'google.ci',      'ck': 'google.co.ck',
-        'cl': 'google.cl',      'cm': 'google.cm',      'cn': 'google.cn',
-        'co': 'google.com.co',  'cr': 'google.co.cr',   'cu': 'google.com.cu',
-        'cv': 'google.cv',      'cy': 'google.com.cy',  'cz': 'google.cz',
-        'de': 'google.de',      'dj': 'google.dj',      'dk': 'google.dk',
-        'dm': 'google.dm',      'do': 'google.com.do',  'dz': 'google.dz',
-        'ec': 'google.com.ec',  'ee': 'google.ee',      'eg': 'google.com.eg',
-        'es': 'google.es',      'et': 'google.com.et',  'fi': 'google.fi',
-        'fj': 'google.com.fj',  'fm': 'google.fm',      'fr': 'google.fr',
-        'ga': 'google.ga',      'ge': 'google.ge',      'gf': 'google.gf',
-        'gg': 'google.gg',      'gh': 'google.com.gh',  'gi': 'google.com.gi',
-        'gl': 'google.gl',      'gm': 'google.gm',      'gp': 'google.gp',
-        'gr': 'google.gr',      'gt': 'google.com.gt',  'gy': 'google.gy',
-        'hk': 'google.com.hk',  'hn': 'google.hn',      'hr': 'google.hr',
-        'ht': 'google.ht',      'hu': 'google.hu',      'id': 'google.co.id',
-        'ie': 'google.ie',      'il': 'google.co.il',   'im': 'google.im',
-        'in': 'google.co.in',   'io': 'google.io',      'iq': 'google.iq',
-        'is': 'google.is',      'it': 'google.it',      'je': 'google.je',
-        'jm': 'google.com.jm',  'jo': 'google.jo',      'jp': 'google.co.jp',
-        'ke': 'google.co.ke',   'kg': 'google.kg',      'kh': 'google.com.kh',
-        'ki': 'google.ki',      'kr': 'google.co.kr',   'kw': 'google.com.kw',
-        'kz': 'google.kz',      'la': 'google.la',      'lb': 'google.com.lb',
-        'lc': 'google.com.lc',  'li': 'google.li',      'lk': 'google.lk',
-        'ls': 'google.co.ls',   'lt': 'google.lt',      'lu': 'google.lu',
-        'lv': 'google.lv',      'ly': 'google.com.ly',  'ma': 'google.co.ma',
-        'md': 'google.md',      'me': 'google.me',      'mg': 'google.mg',
-        'mk': 'google.mk',      'ml': 'google.ml',      'mm': 'google.com.mm',
-        'mn': 'google.mn',      'ms': 'google.ms',      'mt': 'google.com.mt',
-        'mu': 'google.mu',      'mv': 'google.mv',      'mw': 'google.mw',
-        'mx': 'google.com.mx',  'my': 'google.com.my',  'mz': 'google.co.mz',
-        'na': 'google.com.na',  'ne': 'google.ne',      'nf': 'google.com.nf',
-        'ng': 'google.com.ng',  'ni': 'google.com.ni',  'nl': 'google.nl',
-        'no': 'google.no',      'np': 'google.com.np',  'nr': 'google.nr',
-        'nu': 'google.nu',      'nz': 'google.co.nz',   'om': 'google.com.om',
-        'pa': 'google.com.pa',  'pe': 'google.com.pe',  'pg': 'google.com.pg',
-        'ph': 'google.com.ph',  'pk': 'google.com.pk',  'pl': 'google.pl',
-        'pn': 'google.co.pn',   'pr': 'google.com.pr',  'ps': 'google.ps',
-        'pt': 'google.pt',      'py': 'google.com.py',  'qa': 'google.com.qa',
-        'ro': 'google.ro',      'rs': 'google.rs',      'ru': 'google.ru',
-        'rw': 'google.rw',      'sa': 'google.com.sa',  'sb': 'google.com.sb',
-        'sc': 'google.sc',      'se': 'google.se',      'sg': 'google.com.sg',
-        'sh': 'google.sh',      'si': 'google.si',      'sk': 'google.sk',
-        'sl': 'google.com.sl',  'sm': 'google.sm',      'sn': 'google.sn',
-        'so': 'google.so',      'sr': 'google.sr',      'st': 'google.st',
-        'sv': 'google.com.sv',  'td': 'google.td',      'tg': 'google.tg',
-        'th': 'google.co.th',   'tj': 'google.com.tj',  'tk': 'google.tk',
-        'tl': 'google.tl',      'tm': 'google.tm',      'tn': 'google.tn',
-        'to': 'google.to',      'tr': 'google.com.tr',  'tt': 'google.tt',
-        'tw': 'google.com.tw',  'tz': 'google.co.tz',   'ua': 'google.com.ua',
-        'ug': 'google.co.ug',   'uk': 'google.co.uk',   'uy': 'google.com.uy',
-        'uz': 'google.co.uz',   'vc': 'google.com.vc',  've': 'google.co.ve',
-        'vg': 'google.vg',      'vi': 'google.co.vi',   'vn': 'google.com.vn',
-        'vu': 'google.vu',      'ws': 'google.ws',      'za': 'google.co.za',
-        'zm': 'google.co.zm',   'zw': 'google.co.zw',
+        'ac': 'google.ac', 'ad': 'google.ad', 'ae': 'google.ae',
+        'af': 'google.com.af', 'ag': 'google.com.ag', 'ai': 'google.com.ai',
+        'al': 'google.al', 'am': 'google.am', 'ao': 'google.co.ao',
+        'ar': 'google.com.ar', 'as': 'google.as', 'at': 'google.at',
+        'au': 'google.com.au', 'az': 'google.az', 'ba': 'google.ba',
+        'bd': 'google.com.bd', 'be': 'google.be', 'bf': 'google.bf',
+        'bg': 'google.bg', 'bh': 'google.com.bh', 'bi': 'google.bi',
+        'bj': 'google.bj', 'bn': 'google.com.bn', 'bo': 'google.com.bo',
+        'br': 'google.com.br', 'bs': 'google.bs', 'bt': 'google.bt',
+        'bw': 'google.co.bw', 'by': 'google.by', 'bz': 'google.com.bz',
+        'ca': 'google.ca', 'cat': 'google.cat', 'cc': 'google.cc',
+        'cd': 'google.cd', 'cf': 'google.cf', 'cg': 'google.cg',
+        'ch': 'google.ch', 'ci': 'google.ci', 'ck': 'google.co.ck',
+        'cl': 'google.cl', 'cm': 'google.cm', 'cn': 'google.cn',
+        'co': 'google.com.co', 'cr': 'google.co.cr', 'cu': 'google.com.cu',
+        'cv': 'google.cv', 'cy': 'google.com.cy', 'cz': 'google.cz',
+        'de': 'google.de', 'dj': 'google.dj', 'dk': 'google.dk',
+        'dm': 'google.dm', 'do': 'google.com.do', 'dz': 'google.dz',
+        'ec': 'google.com.ec', 'ee': 'google.ee', 'eg': 'google.com.eg',
+        'es': 'google.es', 'et': 'google.com.et', 'fi': 'google.fi',
+        'fj': 'google.com.fj', 'fm': 'google.fm', 'fr': 'google.fr',
+        'ga': 'google.ga', 'ge': 'google.ge', 'gf': 'google.gf',
+        'gg': 'google.gg', 'gh': 'google.com.gh', 'gi': 'google.com.gi',
+        'gl': 'google.gl', 'gm': 'google.gm', 'gp': 'google.gp',
+        'gr': 'google.gr', 'gt': 'google.com.gt', 'gy': 'google.gy',
+        'hk': 'google.com.hk', 'hn': 'google.hn', 'hr': 'google.hr',
+        'ht': 'google.ht', 'hu': 'google.hu', 'id': 'google.co.id',
+        'ie': 'google.ie', 'il': 'google.co.il', 'im': 'google.im',
+        'in': 'google.co.in', 'io': 'google.io', 'iq': 'google.iq',
+        'is': 'google.is', 'it': 'google.it', 'je': 'google.je',
+        'jm': 'google.com.jm', 'jo': 'google.jo', 'jp': 'google.co.jp',
+        'ke': 'google.co.ke', 'kg': 'google.kg', 'kh': 'google.com.kh',
+        'ki': 'google.ki', 'kr': 'google.co.kr', 'kw': 'google.com.kw',
+        'kz': 'google.kz', 'la': 'google.la', 'lb': 'google.com.lb',
+        'lc': 'google.com.lc', 'li': 'google.li', 'lk': 'google.lk',
+        'ls': 'google.co.ls', 'lt': 'google.lt', 'lu': 'google.lu',
+        'lv': 'google.lv', 'ly': 'google.com.ly', 'ma': 'google.co.ma',
+        'md': 'google.md', 'me': 'google.me', 'mg': 'google.mg',
+        'mk': 'google.mk', 'ml': 'google.ml', 'mm': 'google.com.mm',
+        'mn': 'google.mn', 'ms': 'google.ms', 'mt': 'google.com.mt',
+        'mu': 'google.mu', 'mv': 'google.mv', 'mw': 'google.mw',
+        'mx': 'google.com.mx', 'my': 'google.com.my', 'mz': 'google.co.mz',
+        'na': 'google.com.na', 'ne': 'google.ne', 'nf': 'google.com.nf',
+        'ng': 'google.com.ng', 'ni': 'google.com.ni', 'nl': 'google.nl',
+        'no': 'google.no', 'np': 'google.com.np', 'nr': 'google.nr',
+        'nu': 'google.nu', 'nz': 'google.co.nz', 'om': 'google.com.om',
+        'pa': 'google.com.pa', 'pe': 'google.com.pe', 'pg': 'google.com.pg',
+        'ph': 'google.com.ph', 'pk': 'google.com.pk', 'pl': 'google.pl',
+        'pn': 'google.co.pn', 'pr': 'google.com.pr', 'ps': 'google.ps',
+        'pt': 'google.pt', 'py': 'google.com.py', 'qa': 'google.com.qa',
+        'ro': 'google.ro', 'rs': 'google.rs', 'ru': 'google.ru',
+        'rw': 'google.rw', 'sa': 'google.com.sa', 'sb': 'google.com.sb',
+        'sc': 'google.sc', 'se': 'google.se', 'sg': 'google.com.sg',
+        'sh': 'google.sh', 'si': 'google.si', 'sk': 'google.sk',
+        'sl': 'google.com.sl', 'sm': 'google.sm', 'sn': 'google.sn',
+        'so': 'google.so', 'sr': 'google.sr', 'st': 'google.st',
+        'sv': 'google.com.sv', 'td': 'google.td', 'tg': 'google.tg',
+        'th': 'google.co.th', 'tj': 'google.com.tj', 'tk': 'google.tk',
+        'tl': 'google.tl', 'tm': 'google.tm', 'tn': 'google.tn',
+        'to': 'google.to', 'tr': 'google.com.tr', 'tt': 'google.tt',
+        'tw': 'google.com.tw', 'tz': 'google.co.tz', 'ua': 'google.com.ua',
+        'ug': 'google.co.ug', 'uk': 'google.co.uk', 'uy': 'google.com.uy',
+        'uz': 'google.co.uz', 'vc': 'google.com.vc', 've': 'google.co.ve',
+        'vg': 'google.vg', 'vi': 'google.co.vi', 'vn': 'google.com.vn',
+        'vu': 'google.vu', 'ws': 'google.ws', 'za': 'google.co.za',
+        'zm': 'google.co.zm', 'zw': 'google.co.zw',
     }
 
     @property
@@ -2719,27 +2736,27 @@ class GooglerCmd(object):
 
         """
         colors = self.colors
-        message = 'googler (? for help)'
-        prompt = (colors.prompt + message + colors.reset + ' ') if (colors and self.promptcolor) else (message + ': ')
-        enter_count = 0
         while True:
-            try:
-                cmd = input(prompt)
-            except EOFError:
-                sys.exit(0)
-
-            if not cmd:
-                enter_count += 1
-                if enter_count == 2:
-                    # Double <enter>
-                    sys.exit(0)
-            else:
-                enter_count = 0
-
-            cmd = ' '.join(cmd.split())
-            if cmd:
-                self.cmd = cmd
-                break
+            userInput = getch()
+            cmd = ' '.join(userInput.split())
+            if len(cmd) == 1:
+                if cmd == "q":
+                    sys.exit()
+                elif cmd == "g":
+                    self.cmd = cmd + " " + input(":")
+                    print("\033c")
+                    break;
+                elif cmd == "w":
+                    self.cmd = input(":")
+                    open_url(self._urltable[self.cmd], True)
+                    break;
+                elif cmd == "n" or cmd == "p":
+                    print("\033c")
+                    self.cmd = cmd
+                    break;
+                else:
+                    self.cmd = cmd
+                    break;
 
     @staticmethod
     def help():
@@ -3187,7 +3204,7 @@ def parse_proxy_spec(proxyspec):
     if '://' in proxyspec:
         pos = proxyspec.find('://')
         scheme = proxyspec[:pos]
-        proxyspec = proxyspec[pos+3:]
+        proxyspec = proxyspec[pos + 3:]
         if scheme.lower() != 'http':
             # Only support HTTP proxies.
             #
@@ -3200,7 +3217,7 @@ def parse_proxy_spec(proxyspec):
         pos = proxyspec.find('@')
         user_passwd = urllib.parse.unquote(proxyspec[:pos])
         # Remove trailing '/' if any
-        host_port = proxyspec[pos+1:].rstrip('/')
+        host_port = proxyspec[pos + 1:].rstrip('/')
     else:
         user_passwd = None
         host_port = proxyspec.rstrip('/')
@@ -3333,7 +3350,7 @@ def parse_args(args=None, namespace=None):
            help='open the first result in web browser and exit')
     addarg('-t', '--time', dest='duration', type=argparser.is_duration,
            metavar='dN', help='time limit search '
-           '[h5 (5 hrs), d5 (5 days), w5 (5 weeks), m5 (5 months), y5 (5 years)]')
+                              '[h5 (5 hrs), d5 (5 days), w5 (5 weeks), m5 (5 months), y5 (5 years)]')
     addarg('--from', type=argparser.is_date,
            help="""starting date/month/year of date range; must use American date
            format with slashes, e.g., 2/24/2020, 2/2020, 2020; can be used in
@@ -3468,6 +3485,7 @@ def main():
         else:
             logger.error(e)
             sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

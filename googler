@@ -19,14 +19,13 @@
 import argparse
 import atexit
 import base64
-import collections
 import codecs
+import collections
 import functools
 import gzip
 import html.entities
 import html.parser
 import http.client
-from http.client import HTTPSConnection
 import locale
 import logging
 import os
@@ -35,7 +34,6 @@ import shutil
 import signal
 import socket
 import ssl
-from subprocess import Popen, PIPE, DEVNULL
 import sys
 import textwrap
 import termios
@@ -2736,6 +2734,12 @@ class GooglerCmd(object):
 
         """
         colors = self.colors
+        if isinstance(self._google_url.keywords,str):
+            oldKeywords = self._google_url.keywords
+        else:
+            oldKeywords = ' '.join(self._google_url.keywords)
+
+        print("[" + oldKeywords + "]");
         while True:
             userInput = getch()
             cmd = ' '.join(userInput.split())
@@ -2746,10 +2750,15 @@ class GooglerCmd(object):
                     self.cmd = cmd + " " + input(":")
                     print("\033c")
                     break;
+                elif cmd == "r":
+                    self.cmd = "g " + rlinput(":", oldKeywords)
+                    print("\033c")
+                    break;
                 elif cmd == "w":
                     self.cmd = input(":")
                     open_url(self._urltable[self.cmd], True)
-                    self.cmd = cmd;
+                    self.cmd = oldKeywords;
+                    print("\033c")
                     break;
                 elif cmd == "n" or cmd == "p":
                     print("\033c")
@@ -3192,6 +3201,14 @@ def self_upgrade(include_git=False):
 
 
 # Miscellaneous functions
+
+def rlinput(prompt, prefill=''):
+    readline.set_startup_hook(lambda: readline.insert_text(prefill))
+    try:
+        return input(prompt)  # or raw_input in Python 2
+    finally:
+        readline.set_startup_hook()
+
 
 def python_version():
     return '%d.%d.%d' % sys.version_info[:3]

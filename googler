@@ -2749,6 +2749,7 @@ class GooglerCmd(object):
                 elif cmd == "w":
                     self.cmd = input(":")
                     open_url(self._urltable[self.cmd], True)
+                    self.cmd = cmd;
                     break;
                 elif cmd == "n" or cmd == "p":
                     print("\033c")
@@ -2953,7 +2954,7 @@ class GooglerCmd(object):
                 else:
                     self.do_google(cmd)
             except NoKeywordsException:
-                printerr('Initiate a query first.')
+                printerr('')
 
 
 class GooglerArgumentParser(argparse.ArgumentParser):
